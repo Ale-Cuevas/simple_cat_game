@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Fish Hunt</title>
+    <style>
+        #gameArea {
+            width: 500px;
+            height: 500px;
+            border: 2px solid black;
+            position: relative;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        .character {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            transition: all 0.1s linear;
+        }
+        #cat {
+            background-color: #808080;
+            border-radius: 50% 50% 0 0;
+            z-index: 2;
+        }
+        #cat::before, #cat::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 15px solid #808080;
+        }
+        #cat::before {
+            left: -5px;
+            transform: rotate(-30deg);
+        }
+        #cat::after {
+            right: -5px;
+            transform: rotate(30deg);
+        }
+        .fish {
+            background-color: #0080ff;
+            border-radius: 50% 0 0 50%;
+            transform: rotate(45deg);
+        }
+        .fish::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            right: -10px;
+            width: 0;
+            height: 0;
+            border-top: 10px solid transparent;
+            border-bottom: 10px solid transparent;
+            border-left: 15px solid #0080ff;
+            transform: rotate(-45deg);
+        }
+        .golden-fish {
+            background-color: gold;
+        }
+        .golden-fish::before {
+            border-left-color: gold;
+        }
+        #dog {
+            background-color: #8B4513;
+            border-radius: 50% 50% 0 0;
+            z-index: 1;
+        }
+        #dog::before, #dog::after {
+            content: '';
+            position: absolute;
+            top: -5px;
+            width: 15px;
+            height: 20px;
+            background-color: #8B4513;
+            border-radius: 50% 50% 0 0;
+        }
+        #dog::before {
+            left: -8px;
+            transform: rotate(-30deg);
+        }
+        #dog::after {
+            right: -8px;
+            transform: rotate(30deg);
+        }
+        @keyframes vibrate {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .paralyzed {
+            animation: vibrate 0.1s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameArea">
+        <div id="cat" class="character"></div>
+        <div id="dog" class="character"></div>
+    </div>
+    <p>Fish caught: <span id="score">0</span></p>
+    <p>Level: <span id="level">1</span></p>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const gameArea = document.getElementById('gameArea');
+            const cat = document.getElementById('cat');
+            const dog = document.getElementById('dog');
+            const scoreElement = document.getElementById('score');
+            const levelElement = document.getElementById('level');
+
+            let catX = 0, catY = 0;
+            let dogX = 450, dogY = 450;
+            let score = 0;
+            let level = 1;
+            let fishes = [];
+            let keysPressed = {};
+            let catSpeed = 5;
+            let dogSpeed = 1;
+            let isDogParalyzed = false;
+
+            function createFish(isGolden = false) {
+                const fish = document.createElement('div');
+                fish.className = 'fish character' + (isGolden ? ' golden-fish' : '');
+                fish.style.left = Math.random() * 470 + 'px';
+                fish.style.top = Math.random() * 470 + 'px';
+                gameArea.appendChild(fish);
+                
+                const speed = isGolden ? 3 : 1;
+                setInterval(() => {
+                    let newX = parseInt(fish.style.left) + (Math.random() * 2 - 1) * speed;
+                    let newY = parseInt(fish.style.top) + (Math.random() * 2 - 1) * speed;
+                    fish.style.left = Math.max(0, Math.min(470, newX)) + 'px';
+                    fish.style.top = Math.max(0, Math.min(470, newY)) + 'px';
+                }, 100);
+                
+                return fish;
+            }
+
+            function createFishes() {
+                for (let i = 0; i < 8; i++) {
+                    fishes.push(createFish());
+                }
+                if (Math.random() < 0.3) {  // 30% chance of golden fish
+                    fishes.push(createFish(true));
+                }
+            }
+
+            function moveCat() {
+                let dx = 0, dy = 0;
+                if (keysPressed['ArrowLeft']) dx -= catSpeed;
+                if (keysPressed['ArrowRight']) dx += catSpeed;
+                if (keysPressed['ArrowUp']) dy -= catSpeed;
+                if (keysPressed['ArrowDown']) dy += catSpeed;
+
+                catX = Math.max(0, Math.min(470, catX + dx));
+                catY = Math.max(0, Math.min(470, catY + dy));
+                cat.style.left = catX + 'px';
+                cat.style.top = catY + 'px';
+                checkCollisions();
+            }
+
+            function moveDog() {
+                if (!isDogParalyzed) {
+                    const dx = catX - dogX;
+                    const dy = catY - dogY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 5) {
+                        dogX += (dx / distance) * dogSpeed;
+                        dogY += (dy / distance) * dogSpeed;
+                        dog.style.left = dogX + 'px';
+                        dog.style.top = dogY + 'px';
+                    }
+                }
+                checkCollisions();
+            }
+
+            function checkCollisions() {
+                fishes.forEach((fish, index) => {
+                    if (Math.abs(catX - parseInt(fish.style.left)) < 30 &&
+                        Math.abs(catY - parseInt(fish.style.top)) < 30) {
+                        gameArea.removeChild(fish);
+                        fishes.splice(index, 1);
+                        score++;
+                        scoreElement.textContent = score;
+                        
+                        if (fish.classList.contains('golden-fish')) {
+                            isDogParalyzed = true;
+                            dogSpeed /= 2;
+                            dog.classList.add('paralyzed');
+                            let flashInterval = setInterval(() => {
+                                dog.style.backgroundColor = dog.style.backgroundColor === 'red' ? '#8B4513' : 'red';
+                            }, 100);
+                            setTimeout(() => {
+                                isDogParalyzed = false;
+                                dogSpeed *= 2;
+                                dog.classList.remove('paralyzed');
+                                clearInterval(flashInterval);
+                                dog.style.backgroundColor = '#8B4513';
+                            }, 2000);
+                        }
+                        
+                        if (fishes.length === 0) {
+                            level++;
+                            levelElement.textContent = level;
+                            dogSpeed = Math.min(catSpeed - 0.5, dogSpeed + 0.25);
+                            createFishes();
+                        }
+                    }
+                });
+
+                if (Math.abs(catX - dogX) < 30 && Math.abs(catY - dogY) < 30) {
+                    alert('Game Over! You were caught by the dog.');
+                    resetGame();
+                }
+            }
+
+            function resetGame() {
+                catX = 0;
+                catY = 0;
+                dogX = 450;
+                dogY = 450;
+                score = 0;
+                level = 1;
+                dogSpeed = 1;
+                isDogParalyzed = false;
+                scoreElement.textContent = score;
+                levelElement.textContent = level;
+                cat.style.left = catX + 'px';
+                cat.style.top = catY + 'px';
+                dog.style.left = dogX + 'px';
+                dog.style.top = dogY + 'px';
+                dog.classList.remove('paralyzed');
+                dog.style.backgroundColor = '#8B4513';
+                fishes.forEach(fish => gameArea.removeChild(fish));
+                fishes = [];
+                createFishes();
+            }
+
+            document.addEventListener('keydown', (e) => {
+                keysPressed[e.key] = true;
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keysPressed[e.key] = false;
+            });
+
+            createFishes();
+            setInterval(moveCat, 20);
+            setInterval(moveDog, 20);
+        });
+    </script>
+</body>
+</html>
